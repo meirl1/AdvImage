@@ -14,9 +14,8 @@ mpl.rcParams['axes.grid'] = False
 
 
 # %%
-pretrained_model = tf.keras.applications.MobileNetV2(include_top=True,
-                                                     weights='imagenet')
-pretrained_model.trainable = True
+pretrained_model = tf.keras.applications.MobileNetV2(include_top=True, weights='imagenet')
+pretrained_model.trainable = False
 
 # ImageNet labels
 decode_predictions = tf.keras.applications.mobilenet_v2.decode_predictions
@@ -24,8 +23,8 @@ decode_predictions = tf.keras.applications.mobilenet_v2.decode_predictions
 # Helper function to preprocess the image so that it can be inputted in MobileNetV2
 def preprocess(image):
   image = tf.cast(image, tf.float32)
-  image = image/255
   image = tf.image.resize(image, (224, 224))
+  image = tf.keras.applications.mobilenet_v2.preprocess_input(image)
   image = image[None, ...]
   return image
 
