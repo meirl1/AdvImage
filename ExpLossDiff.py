@@ -84,7 +84,7 @@ def parse_image(filename):
 # %%
 
 list_ds = tf.data.Dataset.list_files(
-    'Image folder')
+    'val folder\\ILSVRC2012_val_0000000?.JPEG')
 
 # %%
 labels_dict = {}
@@ -112,9 +112,14 @@ for image in images_ds:
 num_clusters = 10
 num_iter = 100
 
-
+tf.compat.v1.enable_eager_execution()
 def input_fn():
-    return grad_ds.batch(10)
+    images_ds = list_ds.map(parse_image)
+    dataset = images_ds.repeat()
+    dataset = dataset.batch(batch_size)
+    dataset = dataset.prefetch(1)
+    iterator = dataset.make_initializable_iterator()
+    return iterator.gen_next()
     # return grad_ds.take(10).repeat(1)
 
 
@@ -127,7 +132,7 @@ for _ in range(num_iter):
     if previous_centers is not None:
         print('delta:', cluster_centers - previous_centers)
     previous_centers = cluster_centers
-    print('score:', kmeans.score(grad_ds.repeat(1)))
+    print('score:', kmeans.score(input_fn))
 print('cluster centers:', cluster_centers)
 
 cluster_indices = list(kmeans.predict_cluster_index(grad_ds.repeat(1)))
@@ -147,7 +152,7 @@ grads = []
 
 
 def gen():
-    root_path = 'image folder\\ILSVRC2012_val_0000'
+    root_path = 'val folder\\ILSVRC2012_val_0000'
     for i in itertools.count(1):
         # print('file:'+root_path+f'{i:04}.JPEG')
         image_raw = tf.io.read_file(root_path+f'{i:04}.JPEG')
@@ -161,5 +166,16 @@ def gen():
         # yield get_gradient(image,label)
         yield (image, i)
 # %%
-grad_ds = tf.data.Dataset.from_generator(
+images_ds2 = tf.data.Dataset.from_generator(
     gen, (tf.float32, tf.int32), (tf.TensorShape([1, 224, 224, 3]), tf.TensorShape([])))
+
+# %%
+i = 0
+for img in images_ds2:
+    print(img)
+    i += 1
+    if i >= 30:
+        break
+
+
+# %%
