@@ -4,20 +4,17 @@
 import tensorflow as tf
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-import tf_filters #This module includes the median filter and some others 
-# - cut from tensorflow addons as it doesn't work on windows yet"""
-import tensorflow_datasets as tfds
+from tensorflow_addons.image import filters
+#import tf_filters #This module includes the median filter and some others 
+# - cut from tensorflow addons as it doesn't work on windows yet
 import numpy as np
 import random
 mpl.rcParams['figure.figsize'] = (8, 8)
 mpl.rcParams['axes.grid'] = False
 
-
-# %%
-"""Let's load the pretained MobileNetV2 model and the ImageNet class names."""
+#Let's load the pretained MobileNetV2 model and the ImageNet class names.
 
 pretrained_model = tf.keras.applications.MobileNetV2(include_top=True, weights='imagenet')
-
 
 pretrained_model.trainable = False
 
@@ -36,8 +33,6 @@ def preprocess(image):
 def get_imagenet_label(probs):
   return decode_predictions(probs, top=1)[0][0]
 
-
-# %%
 loss_object = tf.keras.losses.CategoricalCrossentropy()
 #FGSM
 def create_adversarial_pattern(input_image, input_label):
@@ -52,8 +47,6 @@ def create_adversarial_pattern(input_image, input_label):
   signed_grad = tf.sign(gradient)
   return signed_grad
 
-
-# %%
 def display_images(image, description):
   _, label, confidence = get_imagenet_label(pretrained_model.predict(image))
   plt.figure()
@@ -62,7 +55,8 @@ def display_images(image, description):
                                                    label, confidence*100))
   plt.show()
 
-
+with open('rootpath.txt') as f:
+    root_path = f.readline()
 # %%
 #Iterative Fast Gradient Sign method
 def IFGS(image,d_class,eps = 0.001):
@@ -83,14 +77,13 @@ def IFGS(image,d_class,eps = 0.001):
   return perturbations ,iterCount
 
 
-# %%
 def IAN_generation(image,d_class,eps=0.005,increment=0.005):
     image_probs = pretrained_model.predict(image)
     perturbations, iterCount = IFGS(image,d_class,eps)
     adv_x = image - eps*perturbations
     adv_x = tf.clip_by_value(adv_x,-1,1)
     #adv_probs = pretrained_model.predict(adv_x)
-    filtered_x = tf_filters.median_filter2d(adv_x,(5,5))
+    filtered_x = filters.median_filter2d(adv_x,(5,5))
     filtered_probs = pretrained_model.predict(filtered_x)
     while np.argmax(filtered_probs) == np.argmax(image_probs):
         eps += increment
@@ -99,7 +92,7 @@ def IAN_generation(image,d_class,eps=0.005,increment=0.005):
         adv_x = image - eps*perturbations
         adv_x = tf.clip_by_value(adv_x,-1,1)
         #adv_probs = pretrained_model.predict(adv_x)
-        filtered_x = tf_filters.median_filter2d(adv_x,(5,5))
+        filtered_x = filters.median_filter2d(adv_x,(5,5))
         filtered_probs = pretrained_model.predict(filtered_x)
         print('eps: {},iterCount: {}, Filtered image label: {} Index: {}'.format(eps,iterCount,get_imagenet_label(filtered_probs)[1],np.argmax(filtered_probs)))
     return eps*perturbations, eps, iterCount
@@ -107,16 +100,14 @@ def IAN_generation(image,d_class,eps=0.005,increment=0.005):
 # %%
 #example 
 
-root_path = 'imagenet2012 validation folder\\ILSVRC2012_val_00000'
-
 adv_success=0
 filter_success=0
 resHeaders = ['Original','Target','Actual','Filtered','FGS Iter','eps']
 results = []
 random.seed(0)
 for imgNumber in range(3,4): #Image ILSVRC2012_val_00000003.jpeg is the same image used on the research paper
-    print('file:'+root_path+f'{imgNumber:03}.JPEG')
-    image_raw = tf.io.read_file(root_path+f'{imgNumber:03}.JPEG')#You may change it to any file you like
+    print('file:'+root_path+'ILSVRC2012_img_val\\ILSVRC2012_val_'+f'{imgNumber:08}.JPEG')
+    image_raw = tf.io.read_file(root_path+'ILSVRC2012_img_val\\ILSVRC2012_val_'+f'{imgNumber:08}.JPEG')#You may change it to any file you like
     image = tf.image.decode_image(image_raw)
     if image.shape[2] == 1:
         image = tf.image.grayscale_to_rgb(image)
@@ -145,7 +136,7 @@ for imgNumber in range(3,4): #Image ILSVRC2012_val_00000003.jpeg is the same ima
     else:
         print('Failed')
     
-    filtered_x = tf_filters.median_filter2d(adv_x,(5,5))
+    filtered_x = filters.median_filter2d(adv_x,(5,5))
     filtered_probs = pretrained_model.predict(filtered_x)
     print('Filtered image label: {} Index: {}'.format(get_imagenet_label(filtered_probs)[1],np.argmax(filtered_probs)))
     display_images(filtered_x,'input')
@@ -154,3 +145,7 @@ for imgNumber in range(3,4): #Image ILSVRC2012_val_00000003.jpeg is the same ima
         filter_success+=1
     results.append((np.argmax(image_probs),dNumber,np.argmax(adv_probs),np.argmax(filtered_probs),iterCount,eps))
 print('{} {}'.format(adv_success,filter_success))
+
+
+
+# %%
