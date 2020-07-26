@@ -15,9 +15,7 @@ import numpy as np
 mpl.rcParams['figure.figsize'] = (8, 8)
 mpl.rcParams['axes.grid'] = False
 
-# %%
-pretrained_model = tf.keras.applications.MobileNetV2(
-    include_top=True, weights='imagenet')
+pretrained_model = tf.keras.applications.MobileNetV2(include_top=True, weights='imagenet')
 pretrained_model.trainable = False
 
 # ImageNet labels
@@ -39,8 +37,6 @@ def preprocess(image):
 def get_imagenet_label(probs):
     return decode_predictions(probs, top=1)[0][0]
 
-
-# %%
 loss_object = tf.keras.losses.CategoricalCrossentropy()
 
 def create_adversarial_pattern(input_image, input_label):
@@ -73,20 +69,78 @@ def parse_image(filename):
     #label = parts[-2]
     image = tf.io.read_file(filename)
     image = tf.image.decode_jpeg(image)
+    if image.shape[2] == 1:
+        image = tf.image.grayscale_to_rgb(image)
     image = tf.image.convert_image_dtype(image, tf.float32)
     image = tf.image.resize(image, [224, 224])
     # label prediction
     return image,'no_label'
 
+#path to files
+with open('rootpath.txt') as f:
+    root_path = f.readline()
 
-
+list_ds = tf.data.Dataset.list_files(root_path + '\\ILSVRC2012_img_val\\ILSVRC2012_val_000000??.JPEG')
+images_ds = list_ds.map(parse_image)
 
 # %%
+from copy import deepcopy
+n = 10
+k = 3
+data = images_ds.take(n)
+#k Number of clusters
+#n Number of training data
+#c Number of features in the data
+c = data.__iter__().next()[0].shape
+print('c: {}'.format(c))
+# Generate random centers, here we use sigma and mean to ensure it represent the whole data
+m = tf.keras.metrics.MeanTensor()
+for img in data:
+    _ = m.update_state(img[0])
+mean = m.result()
+print('mean: {}'.format(mean.shape))
 
-list_ds = tf.data.Dataset.list_files(
-    'val folder\\ILSVRC2012_val_0000000?.JPEG')
+var = tf.zeros(data.__iter__().next()[0].shape)
+for img in data:
+    var += (img[0] - mean)**2
+std = tf.sqrt(var)
+print('std: {}'.format(std.shape))
 
-# %%
+centers = tf.random.normal([[k],data.__iter__().next()[0].shape],mean,std,seed=0)
+print('centers: {}'.format(centers.shape))
+centers_old = tf.zeros(centers.shape) # to store old centers
+centers_new = deepcopy(centers) # Store new centers
+
+clusters = tf.zeros(n)
+distances = tf.zeros((n,k))
+
+error = tf.linalg.norm(centers_new - centers_old)
+
+# When, after an update, the estimate of that center stays the same, exit loop
+while error != 0:
+    # Measure the distance to every center
+    for i in range(k):
+        print('loop: {}'.format(i))
+        j =  0
+        for img in data:
+            print('img[]: {}'.format(img[0].shape))
+            distances[j,i] = tf.linalg.norm(img[0] - centers[i])
+            j += 1
+    # Assign all training data to closest center
+    clusters = tf.math.argmin(distances, axis = 1)
+    
+    centers_old = deepcopy(centers_new)
+    # Calculate mean for every cluster and update the center
+    for i in range(k):
+        m = tf.keras.metrics.MeanTensor()
+        for img in data:
+            if clusters == i:
+                _ = m.update_state(img[0])
+        centers_new[i] = m.result()
+    error = tf.linalg.norm(centers_new - centers_old)
+
+print(centers_new)
+#%%
 labels_dict = {}
 for file in list_ds:
     image_raw = tf.io.read_file(file)
@@ -101,12 +155,12 @@ for file in list_ds:
     print(labels_dict[str(tf.strings.split(file, os.sep)[-1])])
 
 # %%
-images_ds = list_ds.map(parse_image)
-
-# %%
-for image in images_ds:
+img_dt = images_ds.take(5)
+for image in img_dt:
     print(image)
 
+#%%
+img_dt.__iter__().next()[0].shape[0]
 
 # %%
 num_clusters = 10
@@ -152,10 +206,9 @@ grads = []
 
 
 def gen():
-    root_path = 'val folder\\ILSVRC2012_val_0000'
     for i in itertools.count(1):
-        # print('file:'+root_path+f'{i:04}.JPEG')
-        image_raw = tf.io.read_file(root_path+f'{i:04}.JPEG')
+        # print('file:'+root_path+f'{i:08}.JPEG')
+        image_raw = tf.io.read_file(root_path+'\\ILSVRC2012_img_val\\ILSVRC2012_val_'+f'{i:08}.JPEG')
         image = tf.image.decode_image(image_raw)
         if image.shape[2] == 1:
             image = tf.image.grayscale_to_rgb(image)
@@ -176,6 +229,5 @@ for img in images_ds2:
     i += 1
     if i >= 30:
         break
-
 
 # %%
