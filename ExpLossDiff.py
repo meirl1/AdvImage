@@ -166,7 +166,6 @@ img_dt.__iter__().next()[0].shape[0]
 num_clusters = 10
 num_iter = 100
 
-tf.compat.v1.enable_eager_execution()
 def input_fn():
     images_ds = list_ds.map(parse_image)
     dataset = images_ds.repeat()
