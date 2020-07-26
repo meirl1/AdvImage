@@ -65,8 +65,8 @@ def get_gradient(input_image, input_label):
 
 
 def parse_image(filename):
-    #parts = tf.strings.split(filename, os.sep)
-    #label = parts[-2]
+    parts = tf.strings.split(filename, os.sep)
+    label = parts[-1]
     image = tf.io.read_file(filename)
     image = tf.image.decode_jpeg(image)
     if image.shape[2] == 1:
@@ -74,7 +74,7 @@ def parse_image(filename):
     image = tf.image.convert_image_dtype(image, tf.float32)
     image = tf.image.resize(image, [224, 224])
     # label prediction
-    return image,'no_label'
+    return image, label
 
 #path to files
 with open('rootpath.txt') as f:
@@ -82,7 +82,6 @@ with open('rootpath.txt') as f:
 
 list_ds = tf.data.Dataset.list_files(root_path + '\\ILSVRC2012_img_val\\ILSVRC2012_val_000000??.JPEG')
 images_ds = list_ds.map(parse_image)
-
 # %%
 from copy import deepcopy
 n = 10
@@ -92,10 +91,10 @@ data = images_ds.take(n)
 #n Number of training data
 #c Number of features in the data
 c = data.__iter__().next()[0].shape
-print('c: {}'.format(c))
 # Generate random centers, here we use sigma and mean to ensure it represent the whole data
 m = tf.keras.metrics.MeanTensor()
 for img in data:
+    print(img[1])
     _ = m.update_state(img[0])
 mean = m.result()
 print('mean: {}'.format(mean.shape))
@@ -105,16 +104,21 @@ for img in data:
     var += (img[0] - mean)**2
 std = tf.sqrt(var)
 print('std: {}'.format(std.shape))
-
-centers = tf.random.normal([[k],data.__iter__().next()[0].shape],mean,std,seed=0)
-print('centers: {}'.format(centers.shape))
-centers_old = tf.zeros(centers.shape) # to store old centers
+centers = []
+centers_old = []
+for i in range(k):
+    centers.append(tf.random.normal(data.__iter__().next()[0].shape,mean,std,seed=0))
+    centers_old.append(tf.zeros(data.__iter__().next()[0].shape))
+    print('centers: {}'.format(centers[i].shape))
+#centers_old = tf.zeros(centers.shape) # to store old centers
 centers_new = deepcopy(centers) # Store new centers
 
 clusters = tf.zeros(n)
 distances = tf.zeros((n,k))
-
-error = tf.linalg.norm(centers_new - centers_old)
+print(distances)
+error = []
+for i in range(k):
+    error.append(tf.linalg.norm(centers_new[i] - centers_old[i]))
 
 # When, after an update, the estimate of that center stays the same, exit loop
 while error != 0:
@@ -123,7 +127,7 @@ while error != 0:
         print('loop: {}'.format(i))
         j =  0
         for img in data:
-            print('img[]: {}'.format(img[0].shape))
+            print('dist: {}'.format(tf.linalg.norm(img[0] - centers[i])))
             distances[j,i] = tf.linalg.norm(img[0] - centers[i])
             j += 1
     # Assign all training data to closest center
@@ -137,7 +141,9 @@ while error != 0:
             if clusters == i:
                 _ = m.update_state(img[0])
         centers_new[i] = m.result()
-    error = tf.linalg.norm(centers_new - centers_old)
+    #error = tf.linalg.norm(centers_new[i] - centers_old[i])
+    for i in range(k):
+        error.append(tf.linalg.norm(centers_new[i] - centers_old[i]))
 
 print(centers_new)
 #%%
