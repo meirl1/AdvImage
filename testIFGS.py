@@ -51,8 +51,7 @@ def display_images(image, description):
   _, label, confidence = get_imagenet_label(pretrained_model.predict(image))
   plt.figure()
   plt.imshow(image[0]*0.5+0.5)
-  plt.title('{} \n {} : {:.2f}% Confidence'.format(description,
-                                                   label, confidence*100))
+  plt.title('{} \n {} : {:.2f}% Confidence'.format(description,label, confidence*100))
   plt.show()
 
 with open('rootpath.txt') as f:
@@ -106,8 +105,8 @@ resHeaders = ['Original','Target','Actual','Filtered','FGS Iter','eps']
 results = []
 random.seed(0)
 for imgNumber in range(3,4): #Image ILSVRC2012_val_00000003.jpeg is the same image used on the research paper
-    print('file:'+root_path+'ILSVRC2012_img_val\\ILSVRC2012_val_'+f'{imgNumber:08}.JPEG')
-    image_raw = tf.io.read_file(root_path+'ILSVRC2012_img_val\\ILSVRC2012_val_'+f'{imgNumber:08}.JPEG')#You may change it to any file you like
+    print('file:'+root_path+'\\ILSVRC2012_img_val\\ILSVRC2012_val_'+f'{imgNumber:08}.JPEG')
+    image_raw = tf.io.read_file(root_path+'\\ILSVRC2012_img_val\\ILSVRC2012_val_'+f'{imgNumber:08}.JPEG')#You may change it to any file you like
     image = tf.image.decode_image(image_raw)
     if image.shape[2] == 1:
         image = tf.image.grayscale_to_rgb(image)
