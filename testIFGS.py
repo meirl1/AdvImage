@@ -117,7 +117,7 @@ for imgNumber in range(3,4): #Image ILSVRC2012_val_00000003.jpeg is the same ima
     print('Image label: {}, Index: {}'.format(get_imagenet_label(image_probs)[1],np.argmax(image_probs)))
     display_images(image,'input')
     
-    dNumber = random.randint(1,1000)
+    dNumber = 705#random.randint(1,1000)
     #for dNumber in range(1,1000):
     #if dNumber != 230:
     d_class = tf.one_hot(dNumber,1000)
