@@ -138,7 +138,97 @@ def IAN_generation(image, d_class, eps=0.005, increment=0.005):
         print('eps: {},iterCount: {}, Filtered image label: {} Index: {}'.format(
             eps, iterCount, decode_predictions(filtered_probs, top=1)[0][0][1], np.argmax(filtered_probs)))
     return eps*perturbations, eps, iterCount
+# %%
+#prepare clusters
 
+n = 99
+k = 3
+# k Number of clusters
+# n Number of training data
+# c Number of features in the data
+# Generate random centers, here we use sigma and mean to ensure it represent the whole data
+m = tf.keras.metrics.MeanTensor()
+for img in data:
+    # print(img[1],img[0].shape)
+    _ = m.update_state(img[0])
+mean = m.result()
+print('mean: {}'.format(mean))
+
+var = tf.zeros(data.__iter__().next()[0].shape)
+for img in data:
+    var += (img[0] - mean)**2
+std = tf.sqrt(var/n)
+print('std: {}'.format(std))
+centers = []
+centers_old = []
+for i in range(k):
+    centers.append(tf.random.normal(data.__iter__().next()[0].shape, mean, std, seed=0))
+    centers_old.append(tf.zeros(data.__iter__().next()[0].shape))
+# centers_old = tf.zeros(centers.shape) # to store old centers
+centers_new = deepcopy(centers)  # Store new centers
+
+clusters = np.zeros(n)
+distances = np.zeros((n, k))
+error = (tf.linalg.norm(centers_new[k-1] - centers_old[k-1]))
+for i in range(k-1):
+    print(i)
+    error += (tf.linalg.norm(centers_new[i] - centers_old[i]))
+error /= k
+print('error: {}'.format(error))
+# When, after an update, the estimate of that center stays the same, exit loop
+while error > 0.0001:
+    # Measure the distance to every center
+    for i in range(k):
+        j = 0
+        for img in data:
+            distances[j, i] = tf.linalg.norm(img[0] - centers_new[i])
+            j += 1
+    # Assign all training data to closest center
+    clusters = np.argmin(distances, axis=1)
+    centers_old = deepcopy(centers_new)
+    # Calculate mean for every cluster and update the center
+    for i in range(k):
+        m = tf.keras.metrics.MeanTensor()
+        j = 0
+        for img in data:
+            if clusters[j] == i:
+                _ = m.update_state(img[0])
+            j += 1
+        centers_new[i] = m.result()
+    # error = tf.linalg.norm(centers_new[i] - centers_old[i])
+    error = tf.linalg.norm(centers_new[k-1] - centers_old[k-1])
+    for i in range(k-1):
+        print(i)
+        error += tf.linalg.norm(centers_new[i] - centers_old[i])
+    error /= k
+    print('error: {}'.format(error))
+np.savetxt('clusters.csv',clusters,delimiter=',')
+print(centers_new)
+#%%
+import pandas as pd
+mn_data = list_ds.map(preprocess)
+file_list = []
+idx_list = []
+for img in mn_data:
+    print(img[1])
+    file_list.append(str(img[1]).split('_')[2].split('.')[0])
+    idx_list.append(np.argmax(pretrained_model.predict(img[0])))
+
+df = pd.DataFrame(index=file_list,columns=idx_list)
+df = df.loc[:,~df.columns.duplicated()]
+# %%
+files_1 = []
+files_2 = []
+files_3 = []
+i = 0
+for filename in list_ds:
+    if clusters[i] == 0:
+        files_1.append(filename)
+    elif clusters[i] == 1:
+        files_2.append(filename)
+    else:
+        files_3.append(filename)
+    i += 1
 # %%
 adv_success = 0
 filter_success = 0
