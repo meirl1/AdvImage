@@ -1,8 +1,6 @@
 # To add a new cell, type '# %%'
 # To add a new markdown cell, type '# %% [markdown]'
 # %%
-from copy import deepcopy
-import itertools
 import time
 import os
 import tensorflow as tf
@@ -92,8 +90,8 @@ with open('rootpath.txt') as f:
     root_path = f.readline()
 
 list_ds = tf.data.Dataset.list_files(
-    root_path + '\\ILSVRC2012_img_val\\ILSVRC2012_val_000000??.JPEG', shuffle=False)
-data = list_ds.map(parse_image)
+    root_path + '\\ILSVRC2012_img_val\\*.JPEG', shuffle=False)
+data = list_ds.map(preprocess)
 # %%
 # Iterative Fast Gradient Sign method
 
@@ -140,50 +138,52 @@ def IAN_generation(image, d_class, eps=0.005, increment=0.005):
     return eps*perturbations, eps, iterCount
 
 # %%
+import random
 adv_success = 0
 filter_success = 0
 results = []
 row = 0
-for img in mn_data.shuffle(100).take(10):
+for img in data.take(10):
     image = img[0]
     image_probs = pretrained_model.predict(image)
+    print(decode_predictions(image_probs)[0][0][1])
     label = tf.one_hot(np.argmax(image_probs), image_probs.shape[-1])
     label = tf.reshape(label, (1, image_probs.shape[-1]))
     display_images(image, 'input')
-    column = 0
-    for dNumber in df.columns:
-        if np.argmax(image_probs) != dNumber:
-            d_class = tf.one_hot(dNumber, 1000)
-            d_class = tf.reshape(d_class, (1, 1000))
-            print('decieving class: ',dNumber)
-            delta, eps, df.iloc[row,column] = IAN_generation(image, d_class)
-            adv_x = image - delta
-            adv_x = tf.clip_by_value(adv_x, -1, 1)
-            adv_probs = pretrained_model.predict(adv_x)
-    # results.append((np.argmax(image_probs),dNumber,np.argmax(adv_probs),np.argmax(filtered_probs),iterCount,eps))
-            #display_images(adv_x, 'input')
-            if np.argmax(adv_probs) != np.argmax(image_probs):
-                print('Success')
-                adv_success += 1
-            else:
-                print('Failed')
-        column += 1
-    print('label: {}\nmean: {}'.format(np.argmax(image_probs),df.mean(axis=1)))
-    for i in range(k):
-        print('cluster {}\n\
-            mean: {}'.format(np.array(idx_list)[clusters == i],df[np.array(idx_list)[clusters == i]].mean(axis=1)))
+    dNumber = random.randrange(1,1000)
+    while np.argmax(image_probs) != dNumber:
+        dNumber = random.randrange(1,1000)
+    d_class = tf.one_hot(dNumber, 1000)
+    d_class = tf.reshape(d_class, (1, 1000))
+    print('decieving class:  {} {}'.format(dNumber,decode_predictions(d_class.numpy(), top=1)[0][0][1]))
+    delta, eps, iterNumRand = IAN_generation(image, d_class)
+    adv_x = image - delta
+    adv_x = tf.clip_by_value(adv_x, -1, 1)
+    adv_probs = pretrained_model.predict(adv_x)
+
+    dNumberOpt = np.argsort(np.max(image_probs,axis=0))[-2]
+    d_class = tf.one_hot(dNumberOpt, 1000)
+    d_class = tf.reshape(d_class, (1, 1000))
+    print('decieving class: {} {}'.format(dNumberOpt,decode_predictions(d_class.numpy(), top=1)[0][0][1]))
+    delta, eps, iterNumOpt = IAN_generation(image, d_class)
+    adv_x = image - delta
+    adv_x = tf.clip_by_value(adv_x, -1, 1)
+    adv_probs = pretrained_model.predict(adv_x)
+
+    if np.argmax(adv_probs) != np.argmax(image_probs):
+        print('Success')
+        adv_success += 1
+    else:
+        print('Failed')
     filtered_x = filters.median_filter2d(adv_x, (5, 5))
     filtered_probs = pretrained_model.predict(filtered_x)
     #display_images(filtered_x, 'input')
 
     if np.argmax(filtered_probs) == np.argmax(image_probs):
         filter_success += 1
-    row += 1
+    print('iter rand: {}, iter opt: {}'.format(iterNumRand,iterNumOpt))
 print('{} {}'.format(adv_success, filter_success))
-df.to_csv('Kmeanscenters.csv')
 
 # %%
-print(clusters)
-#check second high value in prediction results
-
+image_probs
 # %%
