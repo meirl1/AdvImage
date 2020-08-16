@@ -1,7 +1,6 @@
 # To add a new cell, type '# %%'
 # To add a new markdown cell, type '# %% [markdown]'
 # %%
-import time
 import os
 import tensorflow as tf
 import matplotlib as mpl
@@ -13,14 +12,32 @@ import numpy as np
 
 mpl.rcParams['figure.figsize'] = (8, 8)
 mpl.rcParams['axes.grid'] = False
+#Select model
+modelChoice = 7
+perturCo = 1
 
-pretrained_model = tf.keras.applications.MobileNetV2(
-    include_top=True, weights='imagenet')
+if modelChoice < 8:
+    if modelChoice == 0:
+        pretrained_model = tf.keras.applications.EfficientNetB0(include_top=True, weights='imagenet')        
+
+    if modelChoice == 1:
+        pretrained_model = tf.keras.applications.EfficientNetB1(include_top=True, weights='imagenet')
+
+    if modelChoice == 2:
+        pretrained_model = tf.keras.applications.EfficientNetB2(include_top=True, weights='imagenet')
+    
+    if modelChoice == 6:
+        pretrained_model = tf.keras.applications.EfficientNetB6(include_top=True, weights='imagenet')
+
+    if modelChoice == 7:
+        pretrained_model = tf.keras.applications.EfficientNetB7(include_top=True, weights='imagenet')
+
+    decode_predictions = tf.keras.applications.efficientnet.decode_predictions
+    preprocess_input = tf.keras.applications.efficientnet.preprocess_input
+    perturCo = 255
+
 pretrained_model.trainable = False
-
-# ImageNet labels
-decode_predictions = tf.keras.applications.mobilenet_v2.decode_predictions
-
+input_shape = pretrained_model.input_shape[1]
 # Helper function to preprocess the image so that it can be inputted in MobileNetV2
 
 
@@ -30,8 +47,8 @@ def preprocess(filename):
     image = tf.io.read_file(filename)
     image = tf.image.decode_jpeg(image, 3)
     image = tf.cast(image, tf.float32)
-    image = tf.image.resize(image, (224, 224))
-    image = tf.keras.applications.mobilenet_v2.preprocess_input(image)
+    image = tf.image.resize(image, (input_shape, input_shape))
+    image = preprocess_input(image)
     image = image[None, ...]
     return image, label
 
@@ -50,7 +67,7 @@ def create_adversarial_pattern(input_image, input_label):
     gradient = tape.gradient(loss, input_image)
     # Get the sign of the gradients to create the perturbation
     signed_grad = tf.sign(gradient)
-    return signed_grad
+    return perturCo*signed_grad
 
 
 def get_gradient(input_image, input_label):
@@ -61,7 +78,7 @@ def get_gradient(input_image, input_label):
 
     # Get the gradients of the loss w.r.t to the input image.
     gradient = tape.gradient(loss, input_image)
-    return gradient
+    return perturCo*gradient
     # Get the sign of the gradients to create the perturbation
 
 
@@ -71,16 +88,16 @@ def parse_image(filename):
     image = tf.io.read_file(filename)
     image = tf.image.decode_jpeg(image, 3)
     image = tf.image.convert_image_dtype(image, tf.float32)
-    image = tf.image.resize(image, [224, 224])
+    image = tf.image.resize(image, [input_shape, input_shape])
     # label prediction
     return image, label
 
 
-def display_images(image, description):
+def display_images(image):
     probs = pretrained_model.predict(image)
     _, label, confidence = decode_predictions(probs, top=1)[0][0]
     plt.figure()
-    plt.imshow(image[0]*0.5+0.5)
+    plt.imshow(image[0].numpy().astype("uint8"))
     plt.title('{} \n {} : {:.2f}% Confidence'.format(np.argmax(probs), label, confidence*100))
     plt.show()
 
@@ -100,17 +117,17 @@ def IFGS(image, d_class, eps=0.001):
     #print('Target deceiving class: {}'.format(np.argmax(d_class)))
     perturbations = create_adversarial_pattern(image, d_class)
     adv_x = image - eps*perturbations
-    adv_x = tf.clip_by_value(adv_x, -1, 1)
+    adv_x = tf.clip_by_value(adv_x, -perturCo, perturCo)
     adv_probs = pretrained_model.predict(adv_x)
     iterCount = 1
     # Keep looping until we get the aversarial label
     while np.argmax(adv_probs) != np.argmax(d_class):
         perturbations += create_adversarial_pattern(adv_x, d_class)
         adv_x = image - eps*perturbations
-        adv_x = tf.clip_by_value(adv_x, -1, 1)
+        adv_x = tf.clip_by_value(adv_x, -perturCo, perturCo)
         adv_probs = pretrained_model.predict(adv_x)
-        '''print('Attempt: {} image label: {}, Index: {}'.format(
-            iterCount, decode_predictions(adv_probs, top=1)[0][0][1], np.argmax(adv_probs)))'''
+        print('Attempt: {} image label: {}, Index: {}'.format(
+            iterCount, decode_predictions(adv_probs, top=1)[0][0][1], np.argmax(adv_probs)))
         # displays progress
         iterCount += 1
     return perturbations, iterCount
@@ -120,7 +137,7 @@ def IAN_generation(image, d_class, eps=0.005, increment=0.005):
     image_probs = pretrained_model.predict(image)
     perturbations, iterCount = IFGS(image, d_class, eps)
     adv_x = image - eps*perturbations
-    adv_x = tf.clip_by_value(adv_x, -1, 1)
+    adv_x = tf.clip_by_value(adv_x, -perturCo, perturCo)
     # adv_probs = pretrained_model.predict(adv_x)
     filtered_x = filters.median_filter2d(adv_x, (5, 5))
     filtered_probs = pretrained_model.predict(filtered_x)
@@ -129,7 +146,7 @@ def IAN_generation(image, d_class, eps=0.005, increment=0.005):
         perturbations, j = IFGS(image, d_class, eps)
         iterCount += j
         adv_x = image - eps*perturbations
-        adv_x = tf.clip_by_value(adv_x, -1, 1)
+        adv_x = tf.clip_by_value(adv_x, -perturCo, perturCo)
         # adv_probs = pretrained_model.predict(adv_x)
         filtered_x = filters.median_filter2d(adv_x, (5, 5))
         filtered_probs = pretrained_model.predict(filtered_x)
@@ -142,34 +159,38 @@ import random
 adv_success = 0
 filter_success = 0
 results = []
-row = 0
+iterRandCount = 0
+iterOptCount = 0
 for img in data.take(10):
     image = img[0]
     image_probs = pretrained_model.predict(image)
     print(decode_predictions(image_probs)[0][0][1])
     label = tf.one_hot(np.argmax(image_probs), image_probs.shape[-1])
     label = tf.reshape(label, (1, image_probs.shape[-1]))
-    display_images(image, 'input')
+    display_images(image)
     dNumber = random.randrange(1,1000)
-    while np.argmax(image_probs) != dNumber:
+    while np.argmax(image_probs) == dNumber:
         dNumber = random.randrange(1,1000)
     d_class = tf.one_hot(dNumber, 1000)
     d_class = tf.reshape(d_class, (1, 1000))
-    print('decieving class:  {} {}'.format(dNumber,decode_predictions(d_class.numpy(), top=1)[0][0][1]))
-    delta, eps, iterNumRand = IAN_generation(image, d_class)
+    print('decieving class: {} {}'.format(dNumber,decode_predictions(d_class.numpy(), top=1)[0][0][1]))
+    delta, eps, iterNumRand = IAN_generation(image, d_class,eps=0.005,increment=0.005)
     adv_x = image - delta
-    adv_x = tf.clip_by_value(adv_x, -1, 1)
+    adv_x = tf.clip_by_value(adv_x, -perturCo, perturCo)
+    display_images(adv_x)
     adv_probs = pretrained_model.predict(adv_x)
+    iterRandCount += iterNumRand
 
-    dNumberOpt = np.argsort(np.max(image_probs,axis=0))[-2]
+    dNumberOpt = np.argsort(np.max(image_probs,axis=0))[-10]
     d_class = tf.one_hot(dNumberOpt, 1000)
     d_class = tf.reshape(d_class, (1, 1000))
     print('decieving class: {} {}'.format(dNumberOpt,decode_predictions(d_class.numpy(), top=1)[0][0][1]))
-    delta, eps, iterNumOpt = IAN_generation(image, d_class)
+    delta, eps, iterNumOpt = IAN_generation(image, d_class,eps=0.005,increment=0.005)
     adv_x = image - delta
-    adv_x = tf.clip_by_value(adv_x, -1, 1)
+    adv_x = tf.clip_by_value(adv_x, -perturCo, perturCo)
+    display_images(adv_x)
     adv_probs = pretrained_model.predict(adv_x)
-
+    iterOptCount += iterNumOpt
     if np.argmax(adv_probs) != np.argmax(image_probs):
         print('Success')
         adv_success += 1
@@ -182,8 +203,9 @@ for img in data.take(10):
     if np.argmax(filtered_probs) == np.argmax(image_probs):
         filter_success += 1
     print('iter rand: {}, iter opt: {}'.format(iterNumRand,iterNumOpt))
+    with open('results01.csv',mode='a') as resf:
+        resf.write('{},{},{},{}\n'.format(str(img[1]).split("'")[1],pretrained_model.name,iterNumRand,iterNumOpt))
 print('{} {}'.format(adv_success, filter_success))
-
 # %%
-image_probs
+pretrained_model.input_shape[1]
 # %%
