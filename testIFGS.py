@@ -104,7 +104,7 @@ filter_success=0
 resHeaders = ['Original','Target','Actual','Filtered','FGS Iter','eps']
 results = []
 random.seed(0)
-for imgNumber in range(3,4): #Image ILSVRC2012_val_00000003.jpeg is the same image used on the research paper
+for imgNumber in range(3,10): #Image ILSVRC2012_val_00000003.jpeg is the same image used on the research paper
     print('file:'+root_path+'\\ILSVRC2012_img_val\\ILSVRC2012_val_'+f'{imgNumber:08}.JPEG')
     image_raw = tf.io.read_file(root_path+'\\ILSVRC2012_img_val\\ILSVRC2012_val_'+f'{imgNumber:08}.JPEG')#You may change it to any file you like
     image = tf.image.decode_image(image_raw)
@@ -117,7 +117,7 @@ for imgNumber in range(3,4): #Image ILSVRC2012_val_00000003.jpeg is the same ima
     print('Image label: {}, Index: {}'.format(get_imagenet_label(image_probs)[1],np.argmax(image_probs)))
     display_images(image,'input')
     
-    dNumber = 705#random.randint(1,1000)
+    dNumber = random.randint(1,1000)
     #for dNumber in range(1,1000):
     #if dNumber != 230:
     d_class = tf.one_hot(dNumber,1000)
