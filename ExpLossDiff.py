@@ -49,8 +49,8 @@ if modelChoice < 9:
         pretrained_model = tf.keras.applications.VGG19(include_top=True, weights='imagenet')
         decode_predictions = tf.keras.applications.vgg19.decode_predictions
         preprocess_input = tf.keras.applications.vgg19.preprocess_input
-        clipByTop = 122
-        clipByButtom = -122
+        clipByTop = [255-103.939 ,255-116.779 ,255-123.68 ]
+        clipByButtom = [-103.939 ,-116.779 ,-123.68 ]
     perturCo = 255
 elif modelChoice == 9:
     pretrained_model = tf.keras.applications.MobileNetV2(include_top=True,weights='imagenet')
@@ -92,7 +92,7 @@ def create_adversarial_pattern(input_image, input_label):
     gradient = tape.gradient(loss, input_image)
     # Get the sign of the gradients to create the perturbation
     signed_grad = tf.sign(gradient)
-    return signed_grad#*max(perturCo-123,1)
+    return signed_grad*max(perturCo-255/2,1)
  
  
 def get_gradient(input_image, input_label):
@@ -143,8 +143,11 @@ data = list_ds.map(preprocess)
  
  
 def IFGS(image, d_class, eps=0.001):
+    global adv_x
+    global perturbations
     #print('Target deceiving class: {}'.format(np.argmax(d_class)))
     perturbations = create_adversarial_pattern(image, d_class)
+    print(np.min(perturbations),np.max(perturbations))
     adv_x = image - eps*perturbations
     adv_x = tf.clip_by_value(adv_x, clipByButtom, clipByTop)
     adv_probs = pretrained_model.predict(adv_x)
@@ -155,15 +158,16 @@ def IFGS(image, d_class, eps=0.001):
         adv_x = image - eps*perturbations
         adv_x = tf.clip_by_value(adv_x, clipByButtom, clipByTop)
         adv_probs = pretrained_model.predict(adv_x)
-        print('Attempt: {} image label: {}, Index: {}, pert: {}'.format(iterCount, decode_predictions(adv_probs, top=1)[0][0][1], np.argmax(adv_probs),perturbations))
+        print('Attempt: {} image label: {}, Index: {}'.format(iterCount, decode_predictions(adv_probs, top=1)[0][0][1], np.argmax(adv_probs)))
         # displays progress
-        if iterCount%200 == 0:
-            display_images(adv_x)
+        '''if iterCount%200 == 0:
+            display_images(adv_x)'''
         iterCount += 1
     return perturbations, iterCount
  
  
 def IAN_generation(image, d_class, eps=0.005, increment=0.005):
+    global adv_x
     image_probs = pretrained_model.predict(image)
     perturbations, iterCount = IFGS(image, d_class, eps)
     adv_x = image - eps*perturbations
@@ -185,30 +189,23 @@ def IAN_generation(image, d_class, eps=0.005, increment=0.005):
     return eps*perturbations, eps, iterCount
 
 #%%
-import random
-dNumber = random.randrange(1,1000)
-d_class = tf.one_hot(dNumber, 1000)
-d_class = tf.reshape(d_class, (1, 1000))
-for img in data.skip(100).take(1):
-    print(create_adversarial_pattern(img[0],d_class))
-#%%
 #Exectution
 import random
 import time
 adv_success = 0
 filter_success = 0
-skip_files = 100
+skip_files = 101
 distance = 1
 results = []
 st_time = time.time()
-for img in data.skip(skip_files).take(1100 - skip_files):
+for img in data.skip(skip_files).take(1):#1100 - skip_files):
     image = img[0]
     image_probs = pretrained_model.predict(image)
     print(str(img[1]).split("'")[1])
     print(decode_predictions(image_probs)[0][0][1])
     display_images(image)
     #Random decieving class
-    dNumber = random.randrange(1,1000)
+    dNumber = 6#random.randrange(1,1000)
     while np.argmax(image_probs) == dNumber:
         dNumber = random.randrange(1,1000)
     d_class = tf.one_hot(dNumber, 1000)
@@ -249,5 +246,7 @@ en_time = st_time - time.time()
 print('{} {}'.format(adv_success, filter_success))
 
 
-
+# %%
+grad = create_adversarial_pattern(image,d_class)
+print(np.min(grad),np.max(grad))
 # %%
