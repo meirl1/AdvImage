@@ -143,33 +143,32 @@ data = list_ds.map(preprocess)
  
  
 def IFGS(image, d_class, eps=0.001):
-    global adv_x
-    global perturbations
     #print('Target deceiving class: {}'.format(np.argmax(d_class)))
     perturbations = create_adversarial_pattern(image, d_class)
+    iterCount = 1
     print(np.min(perturbations),np.max(perturbations))
+    if np.min(perturbations) == 0 and np.max(perturbations) == 0:
+        return perturbations, iterCount
     adv_x = image - eps*perturbations
     adv_x = tf.clip_by_value(adv_x, clipByButtom, clipByTop)
     adv_probs = pretrained_model.predict(adv_x)
-    iterCount = 1
     # Keep looping until we get the aversarial label
     while np.argmax(adv_probs) != np.argmax(d_class):
         perturbations += create_adversarial_pattern(adv_x, d_class)
         adv_x = image - eps*perturbations
         adv_x = tf.clip_by_value(adv_x, clipByButtom, clipByTop)
         adv_probs = pretrained_model.predict(adv_x)
-        print('Attempt: {} image label: {}, Index: {}'.format(iterCount, decode_predictions(adv_probs, top=1)[0][0][1], np.argmax(adv_probs)))
+        #print('Attempt: {} image label: {}, Index: {}'.format(iterCount, decode_predictions(adv_probs, top=1)[0][0][1], np.argmax(adv_probs)))
         # displays progress
-        '''if iterCount%200 == 0:
-            display_images(adv_x)'''
         iterCount += 1
     return perturbations, iterCount
  
  
 def IAN_generation(image, d_class, eps=0.005, increment=0.005):
-    global adv_x
     image_probs = pretrained_model.predict(image)
     perturbations, iterCount = IFGS(image, d_class, eps)
+    if np.min(perturbations) == 0 and np.max(perturbations) == 0:
+        return perturbations, eps, iterCount
     adv_x = image - eps*perturbations
     adv_x = tf.clip_by_value(adv_x, clipByButtom, clipByTop)
     # adv_probs = pretrained_model.predict(adv_x)
@@ -194,18 +193,18 @@ import random
 import time
 adv_success = 0
 filter_success = 0
-skip_files = 101
-distance = 1
+skip_files = 100
+distance = 20
 results = []
 st_time = time.time()
-for img in data.skip(skip_files).take(1):#1100 - skip_files):
+for img in data.skip(skip_files).take(1100 - skip_files):
     image = img[0]
     image_probs = pretrained_model.predict(image)
     print(str(img[1]).split("'")[1])
     print(decode_predictions(image_probs)[0][0][1])
-    display_images(image)
+    #display_images(image)
     #Random decieving class
-    dNumber = 6#random.randrange(1,1000)
+    '''dNumber = random.randrange(1,1000)
     while np.argmax(image_probs) == dNumber:
         dNumber = random.randrange(1,1000)
     d_class = tf.one_hot(dNumber, 1000)
@@ -216,6 +215,11 @@ for img in data.skip(skip_files).take(1):#1100 - skip_files):
     adv_x = tf.clip_by_value(adv_x, clipByButtom, clipByTop)
     #display_images(adv_x)
     adv_probs = pretrained_model.predict(adv_x)
+    if np.argmax(adv_probs) != np.argmax(image_probs):
+        print('Success')
+    else:
+        iterNumRand = 'failed'
+        print(iterNumRand)'''
     
     #Distance based decieving class
     dNumberOpt = np.argsort(np.max(image_probs,axis=0))[-(distance+1)]
@@ -229,24 +233,21 @@ for img in data.skip(skip_files).take(1):#1100 - skip_files):
     adv_probs = pretrained_model.predict(adv_x)
     if np.argmax(adv_probs) != np.argmax(image_probs):
         print('Success')
-        adv_success += 1
     else:
-        print('Failed')
+        iterNumOpt = 'Failed'
+        print(iterNumOpt)
     filtered_x = filters.median_filter2d(adv_x, (5, 5))
     filtered_probs = pretrained_model.predict(filtered_x)
     #display_images(filtered_x, 'input')
  
     if np.argmax(filtered_probs) == np.argmax(image_probs):
         filter_success += 1
-    print('iter opt: {}, iter rand: {}'.format(iterNumOpt,iterNumRand))
-    with open('VGG191.txt',mode='a') as resf:
-        resf.write('{},{},{},{},{},{},{},{}\n'.format(str(img[1]).split("'")[1],pretrained_model.name,distance,np.argmax(image_probs),dNumber,dNumberOpt,iterNumRand,iterNumOpt))
+    print('iter opt: {}, iter rand: {}'.format(iterNumOpt,'NA'))
+    with open('VGG1920.txt',mode='a') as resf:
+        resf.write('{},{},{},{},{},{},{},{}\n'.format(str(img[1]).split("'")[1],pretrained_model.name,distance,np.argmax(image_probs),'NA',dNumberOpt,'NA',iterNumOpt))
 
 en_time = st_time - time.time()
 print('{} {}'.format(adv_success, filter_success))
 
 
-# %%
-grad = create_adversarial_pattern(image,d_class)
-print(np.min(grad),np.max(grad))
 # %%
