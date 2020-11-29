@@ -11,7 +11,7 @@ import numpy as np
 mpl.rcParams['figure.figsize'] = (8, 8)
 mpl.rcParams['axes.grid'] = False
 #Select model
-modelChoice = 9
+modelChoice = 4
 perturCo = 1
 clipByTop = 1
 clipByButtom = -1
@@ -105,7 +105,7 @@ def get_gradient(input_image, input_label):
  
     # Get the gradients of the loss w.r.t to the input image.
     gradient = tape.gradient(loss, input_image)
-    return perturCo*gradient
+    return gradient
     # Get the sign of the gradients to create the perturbation
  
  
@@ -160,8 +160,8 @@ def IFGS(image, d_class, eps=0.001):
         adv_x = image - eps*perturbations
         adv_x = tf.clip_by_value(adv_x, clipByButtom, clipByTop)
         adv_probs = pretrained_model.predict(adv_x)
-        if iterCount%10 == 0:
-            display_images(adv_x)
+        #if iterCount%10 == 0:
+        #    display_images(adv_x)
         #print('Attempt: {} image label: {}, Index: {}'.format(iterCount, decode_predictions(adv_probs, top=1)[0][0][1], np.argmax(adv_probs)))
         # displays progress
         iterCount += 1
@@ -197,8 +197,8 @@ import random
 import time
 adv_success = 0
 filter_success = 0
-skip_files = 100
-distance = 100
+skip_files = 433
+distance = 20
 results = []
 st_time = time.time()
 for img in data.skip(skip_files).take(1100 - skip_files):
@@ -227,6 +227,8 @@ for img in data.skip(skip_files).take(1100 - skip_files):
         iterNumRand = 'failed'
         print(iterNumRand)
     
+    distance = random.randint(15,50)
+    print("distance: ",distance)
     #Distance based decieving class
     dNumberOpt = np.argsort(np.max(image_probs,axis=0))[-(distance+1)]
     d_class = tf.one_hot(dNumberOpt, 1000)
@@ -249,9 +251,9 @@ for img in data.skip(skip_files).take(1100 - skip_files):
     if np.argmax(filtered_probs) == np.argmax(image_probs):
         filter_success += 1
     print('iter opt: {}, iter rand: {}'.format(iterNumOpt,iterNumRand))
-    with open('VGG16100test.txt',mode='a') as resf:
+    with open('EffiNet4_15_50.txt',mode='a') as resf:
         resf.write('{},{},{},{},{},{},{},{}\n'.format(str(img[1]).split("'")[1],pretrained_model.name,distance,np.argmax(image_probs),dNumber,dNumberOpt,iterNumRand,iterNumOpt))
-
+    
 en_time = st_time - time.time()
 print('{} {}'.format(adv_success, filter_success))
 
