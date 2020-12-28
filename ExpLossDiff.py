@@ -11,7 +11,7 @@ import numpy as np
 mpl.rcParams['figure.figsize'] = (8, 8)
 mpl.rcParams['axes.grid'] = False
 #Select model
-modelChoice = 4
+modelChoice = 10
 perturCo = 1
 clipByTop = 1
 clipByButtom = -1
@@ -91,7 +91,8 @@ def create_adversarial_pattern(input_image, input_label):
     '''if np.min(gradient) == 0 and np.max(gradient) == 0:
         print(np.min(gradient),np.max(gradient))
         gradient = tf.random.Generator.from_seed(1).normal(gradient.shape)'''
-    
+    #bmean = np.mean(gradient)
+    #gradient = tf.where(tf.abs(gradient) < bmean,0,gradient)
     # Get the sign of the gradients to create the perturbation
     signed_grad = tf.sign(gradient)
     return signed_grad*max(perturCo-255/2,1)
@@ -133,24 +134,23 @@ def display_images(image):
  
     plt.title('{} \n {} : {:.2f}% Confidence'.format(np.argmax(probs), label, confidence*100))
     plt.show()
+
 #%%
 # path to files
 with open('rootpath.txt') as f:
     root_path = f.readline()
- 
+
 list_ds = tf.data.Dataset.list_files(root_path + '/ILSVRC2012_img_val/ILSVRC2012_val_0000????.JPEG', shuffle=False)
 data = list_ds.map(preprocess)
  
 # Iterative Fast Gradient Sign method
- 
- 
 def IFGS(image, d_class, eps=0.001):
     #print('Target deceiving class: {}'.format(np.argmax(d_class)))
     perturbations = create_adversarial_pattern(image, d_class)
     iterCount = 1
     print(np.min(perturbations),np.max(perturbations))
-    if np.min(perturbations) == 0 and np.max(perturbations) == 0:
-        return perturbations, iterCount
+    '''if np.min(perturbations) == 0 and np.max(perturbations) == 0:
+        return perturbations, iterCount'''
     adv_x = image - eps*perturbations
     adv_x = tf.clip_by_value(adv_x, clipByButtom, clipByTop)
     adv_probs = pretrained_model.predict(adv_x)
@@ -171,8 +171,8 @@ def IFGS(image, d_class, eps=0.001):
 def IAN_generation(image, d_class, eps=0.005, increment=0.005):
     image_probs = pretrained_model.predict(image)
     perturbations, iterCount = IFGS(image, d_class, eps)
-    if np.min(perturbations) == 0 and np.max(perturbations) == 0:
-        return perturbations, eps, iterCount
+    '''if np.min(perturbations) == 0 and np.max(perturbations) == 0:
+        return perturbations, eps, iterCount'''
     adv_x = image - eps*perturbations
     adv_x = tf.clip_by_value(adv_x, clipByButtom, clipByTop)
     # adv_probs = pretrained_model.predict(adv_x)
@@ -190,15 +190,17 @@ def IAN_generation(image, d_class, eps=0.005, increment=0.005):
         print('eps: {},iterCount: {}, Filtered image label: {} Index: {}'.format(
             eps, iterCount, decode_predictions(filtered_probs, top=1)[0][0][1], np.argmax(filtered_probs)))
     return eps*perturbations, eps, iterCount
-
+#%%
+with open('MobileNetV2_1.txt',mode='a') as resf:
+        resf.write('file,model,label,rnd_adv_lbl,dist_rnd,itr_rnd,opt_adv_lbl,dist_opt,itr_optimized\n')
 #%%
 #Exectution
 import random
 import time
 adv_success = 0
 filter_success = 0
-skip_files = 433
-distance = 20
+skip_files = 100
+distance = 1
 results = []
 st_time = time.time()
 for img in data.skip(skip_files).take(1100 - skip_files):
@@ -227,8 +229,7 @@ for img in data.skip(skip_files).take(1100 - skip_files):
         iterNumRand = 'failed'
         print(iterNumRand)
     
-    distance = random.randint(15,50)
-    print("distance: ",distance)
+    #distance = random.randint(15,50)
     #Distance based decieving class
     dNumberOpt = np.argsort(np.max(image_probs,axis=0))[-(distance+1)]
     d_class = tf.one_hot(dNumberOpt, 1000)
@@ -251,11 +252,46 @@ for img in data.skip(skip_files).take(1100 - skip_files):
     if np.argmax(filtered_probs) == np.argmax(image_probs):
         filter_success += 1
     print('iter opt: {}, iter rand: {}'.format(iterNumOpt,iterNumRand))
-    with open('EffiNet4_15_50.txt',mode='a') as resf:
-        resf.write('{},{},{},{},{},{},{},{}\n'.format(str(img[1]).split("'")[1],pretrained_model.name,distance,np.argmax(image_probs),dNumber,dNumberOpt,iterNumRand,iterNumOpt))
+    with open('MobileNetV2_1.txt',mode='a') as resf:
+        resf.write('{},{},{},{},{},{},{},{},{}\n'.format(str(img[1]).split("'")[1],pretrained_model.name,np.argmax(image_probs),dNumber,999-np.where(np.argsort(np.max(image_probs,axis=0))==dNumber)[0][0],iterNumRand,dNumberOpt,distance,iterNumOpt))
     
 en_time = st_time - time.time()
 print('{} {}'.format(adv_success, filter_success))
 
+
+# %%
+
+for img in data.skip(230).take(1):
+    #image = img[0]
+    image, _ = preprocess('D:\Apps\Caribbean_hermit_crab.jpg')
+    image_probs = pretrained_model.predict(image)
+    display_images(image)
+    dNumberOpt = 365
+    d_class = tf.one_hot(dNumberOpt, 1000)
+    d_class = tf.reshape(d_class, (1, 1000))
+    print('decieving class: {} {}'.format(dNumberOpt,decode_predictions(d_class.numpy(), top=1)[0][0][1]))
+    delta, eps, iterNumOpt = IAN_generation(image, d_class,eps=0.005,increment=0.005)
+    adv_x = image - delta
+    adv_x = tf.clip_by_value(adv_x, clipByButtom, clipByTop)
+    display_images(adv_x)
+# %%
+999-np.where(np.argsort(np.max(image_probs,axis=0))==112)[0][0]
+
+#%%
+decode_predictions(image_probs, top= 200)[0][41]
+# %%
+999-np.where(np.argsort(np.max(image_probs,axis=0))==446)[0][0]
+# %%
+
+adv_x = tf.image.sobel_edges(image)
+adv_xy = np.asarray(adv_x[0, :, :, :, 0])+np.asarray(adv_x[0, :, :, :, 1])
+
+adv_xyprobs = pretrained_model.predict(adv_xy)
+
+
+# %%
+decode_predictions(image_probs, top= 10)
+# %%
+999-np.where(np.argsort(np.max(image_probs,axis=0))==9)[0]
 
 # %%
