@@ -3,11 +3,10 @@ import tensorflow as tf
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from tensorflow.python.ops.gen_parsing_ops import decode_raw
-from tensorflow_addons.image import filters
 import numpy as np
 import csv
 import random
-import time
+from noisegen import NoiseGen
 #Optimization for intel CPU
 TF_ENABLE_ONEDNN_OPTS=1
 tf.config.experimental.set_memory_growth(tf.config.list_physical_devices('GPU')[0],True)
@@ -24,7 +23,6 @@ decode_predictions = tf.keras.applications.mobilenet_v3.decode_predictions
 #Using preprocess_input of v2 to convert image values from [0,255] to [-1,1]. preprocess_input of v3 no longer does it.
 preprocess_input = tf.keras.applications.mobilenet_v2.preprocess_input
 
-
 pretrained_model.trainable = False
 input_shape = pretrained_model.input_shape[1]
 
@@ -32,13 +30,29 @@ input_shape = pretrained_model.input_shape[1]
 
 loss_object = tf.keras.losses.CategoricalCrossentropy()
 
+def display_images(image):
+        probs = pretrained_model.predict(image)
+        _, label, confidence = decode_predictions(probs, top=1)[0][0]
+        plt.figure()
+        plt.imshow(image[0]*0.5+0.5)
+        plt.title('{} \n {} : {:.2f}% Confidence'.format(np.argmax(probs), label, confidence*100))
+        plt.show()
+
+def preprocess(image):
+        image = tf.image.resize(image, (224, 224))
+        image = preprocess_input(image)
+        image = image[None, ...]
+        return image
+
 def generate_AE_demo(image,image_probs,label,confidence):
     f ,axarr = plt.subplots(2,2,figsize=(18,18))
     axarr[0][0].imshow(image[0]*0.5+0.5)
     axarr[0][0].title.set_text('Original image: {} {} : {:.2f}% Confidence'.format(np.argmax(image_probs), label, confidence*100))
     
     print('Generating adversarial example with FGSM')
-    delta, eps, iterCount = AE_generation(image,d_class,eps=0.005,increment=0.005,adversarial_pattern=adversarial_pattern_FGSM)
+    noise_obj = NoiseGen(clipByTop=1,clipByButtom=1,pretrained_model=pretrained_model,loss_object=loss_object,
+        adversarial_pattern=NoiseGen.adversarial_pattern_FGSM,eps=0.005,increment=0.005,confidence=0.7)
+    delta, eps, iterCount = noise_obj.AE_generation(image,d_class)
     adv_x = image - delta
     adv_x = tf.clip_by_value(adv_x, clipByButtom, clipByTop)
     adv_probs = pretrained_model.predict(adv_x)
@@ -48,7 +62,8 @@ def generate_AE_demo(image,image_probs,label,confidence):
         np.argmax(adv_probs), adv_label, adv_confidence*100,iterCount, tf.linalg.norm(image[0]-adv_x[0]).numpy()))
 
     print('Generating adversarial example with FGNM')
-    delta, eps, iterCount = AE_generation(image,d_class,eps=0.005,increment=0.005,adversarial_pattern=adversarial_pattern_FGNM)
+    noise_obj.adversarial_pattern = NoiseGen.adversarial_pattern_FGNM
+    delta, eps, iterCount = noise_obj.AE_generation(image,d_class)
     adv_x = image - delta
     adv_x = tf.clip_by_value(adv_x, clipByButtom, clipByTop)
     adv_probs = pretrained_model.predict(adv_x)
@@ -58,7 +73,10 @@ def generate_AE_demo(image,image_probs,label,confidence):
         np.argmax(adv_probs), adv_label, adv_confidence*100,iterCount, tf.linalg.norm(image[0]-adv_x[0]).numpy()))
 
     print('Generating adversarial example with PGM')
-    delta, eps, iterCount = AE_generation(image,d_class,eps=0.1,increment=0.01,adversarial_pattern=adversarial_pattern_PGM)
+    noise_obj.adversarial_pattern = NoiseGen.adversarial_pattern_PGM
+    noise_obj.eps = 0.1
+    noise_obj.increment = 0.01
+    delta, eps, iterCount = noise_obj.AE_generation(image,d_class)
     adv_x = image - delta
     adv_x = tf.clip_by_value(adv_x, clipByButtom, clipByTop)
     adv_probs = pretrained_model.predict(adv_x)
